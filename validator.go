@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"github.com/astaxie/beego"
 	"reflect"
 	"regexp"
 	"strings"
@@ -36,37 +37,65 @@ type StringValidator struct {
 func (v StringValidator) Validate(val interface{}) (bool, error) {
 	l := len(val.(string))
 
-	if l == 0 {
-		return false, fmt.Errorf("cannot be blank")
-	}
-
 	if l < v.Min {
-		return false, fmt.Errorf("should be at least %v chars long", v.Min)
+		if v.Min == 1 {
+			return false, fmt.Errorf("不能为空")
+		}
+		return false, fmt.Errorf("至少%v位", v.Min)
 	}
 
 	if v.Max >= v.Min && l > v.Max {
-		return false, fmt.Errorf("should be less than %v chars long", v.Max)
+		return false, fmt.Errorf("最大长度为%v位", v.Max)
 	}
 
 	return true, nil
 }
 
+// StringValidator validates string presence and/or its length.
+type RegexValidator struct {
+	Pattern string
+}
+
+func (v RegexValidator) Validate(val interface{}) (bool, error) {
+	l := val.(string)
+	if matched, err := regexp.MatchString(v.Pattern, l); err != nil {
+		return false, err
+	} else {
+		if matched {
+			return true, nil
+		} else {
+			return false, fmt.Errorf("不符合规则")
+		}
+	}
+}
+
 // NumberValidator performs numerical value validation.
 // Its limited to int type for simplicity.
 type NumberValidator struct {
-	Min int
-	Max int
+	Min float64
+	Max float64
 }
 
 func (v NumberValidator) Validate(val interface{}) (bool, error) {
-	num := val.(int)
+	var num float64
+	switch v := val.(type) {
+	case float64:
+		num = v
+	case int64:
+		num = float64(v)
+	case int32:
+		num = float64(v)
+	case int:
+		num = float64(v)
+	}
 
 	if num < v.Min {
-		return false, fmt.Errorf("should be greater than %v", v.Min)
+		return false, fmt.Errorf("必须大于%v", v.Min)
 	}
 
 	if v.Max >= v.Min && num > v.Max {
-		return false, fmt.Errorf("should be less than %v", v.Max)
+		beego.Trace(fmt.Sprintf("%+v and num is %g", v, num))
+		return false, fmt.Errorf("不能超过%v", v.Max)
 	}
 
 	return true, nil
@@ -86,20 +115,55 @@ func (v EmailValidator) Validate(val interface{}) (bool, error) {
 // Returns validator struct corresponding to validation type
 func getValidatorFromTag(tag string) Validator {
 	args := strings.Split(tag, ",")
-
+	beego.Trace(args)
 	switch args[0] {
 	case "number":
 		validator := NumberValidator{}
-		fmt.Sscanf(strings.Join(args[1:], ","), "min=%d,max=%d", &validator.Min, &validator.Max)
+		arg1 := args[1:]
+		if len(arg1) == 2 {
+			fmt.Sscanf(strings.Join(args[1:], ","), "min=%g,max=%g", &validator.Min, &validator.Max)
+			beego.Trace(validator)
+		} else if len(arg1) == 1 {
+			if strings.Contains(arg1[0], "min") {
+				fmt.Sscanf(strings.Join(args[1:], ","), "min=%g", &validator.Min)
+				validator.Max = 0
+			} else if strings.Contains(arg1[0], "max") {
+				fmt.Sscanf(strings.Join(args[1:], ","), "max=%g", &validator.Max)
+				validator.Min = 0
+			} else {
+				fmt.Printf("Error validate formart")
+			}
+		} else {
+			fmt.Printf("Error validate formart")
+		}
 		return validator
 	case "string":
 		validator := StringValidator{}
-		fmt.Sscanf(strings.Join(args[1:], ","), "min=%d,max=%d", &validator.Min, &validator.Max)
+		arg1 := args[1:]
+
+		if len(arg1) == 2 {
+			fmt.Sscanf(strings.Join(args[1:], ","), "min=%d,max=%d", &validator.Min, &validator.Max)
+		} else if len(arg1) == 1 {
+			if strings.Contains(arg1[0], "min") {
+				fmt.Sscanf(strings.Join(args[1:], ","), "min=%d", &validator.Min)
+				validator.Max = 0
+			} else if strings.Contains(arg1[0], "max") {
+				fmt.Sscanf(strings.Join(args[1:], ","), "max=%d", &validator.Max)
+				validator.Min = 0
+			} else {
+				fmt.Printf("Error validate formart")
+			}
+		} else {
+			fmt.Printf("Error validate formart")
+		}
 		return validator
 	case "email":
 		return EmailValidator{}
+	case "regex":
+		validator := RegexValidator{}
+		fmt.Sscanf(strings.Join(args[1:], ","), "pattern=%s", &validator.Pattern)
+		return validator
 	}
-
 	return DefaultValidator{}
 }
 
@@ -109,7 +173,6 @@ func ValidateStruct(s interface{}) []error {
 
 	// ValueOf returns a Value representing the run-time data
 	v := reflect.ValueOf(s)
-
 	for i := 0; i < v.NumField(); i++ {
 		// Get the field tag value
 		tag := v.Type().Field(i).Tag.Get(tagName)
@@ -127,7 +190,17 @@ func ValidateStruct(s interface{}) []error {
 
 		// Append error to results
 		if !valid && err != nil {
-			errs = append(errs, fmt.Errorf("%s %s", v.Type().Field(i).Name, err.Error()))
+			name := ""
+			tagjson := v.Type().Field(i).Tag.Get("json")
+			tagMsg := v.Type().Field(i).Tag.Get("msg")
+			if tagMsg != "" {
+				name = tagMsg
+			} else if tagjson != "" {
+				name = tagjson
+			} else {
+				name = v.Type().Field(i).Name
+			}
+			errs = append(errs, fmt.Errorf("%s%s", name, err.Error()))
 		}
 	}
 
