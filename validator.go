@@ -58,15 +58,18 @@ type RegexValidator struct {
 
 func (v RegexValidator) Validate(val interface{}) (bool, error) {
 	l := val.(string)
-	if matched, err := regexp.MatchString(v.Pattern, l); err != nil {
-		return false, err
-	} else {
-		if matched {
-			return true, nil
+	if l != "" {
+		if matched, err := regexp.MatchString(v.Pattern, l); err != nil {
+			return false, err
 		} else {
-			return false, fmt.Errorf("不符合规则")
+			if matched {
+				return true, nil
+			} else {
+				return false, fmt.Errorf("不符合规则")
+			}
 		}
 	}
+	return true, nil
 }
 
 // NumberValidator performs numerical value validation.
