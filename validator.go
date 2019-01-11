@@ -2,7 +2,6 @@ package validator
 
 import (
 	"fmt"
-	"github.com/astaxie/beego"
 	"reflect"
 	"regexp"
 	"strings"
@@ -97,8 +96,7 @@ func (v NumberValidator) Validate(val interface{}) (bool, error) {
 	}
 
 	if v.Max >= v.Min && num > v.Max {
-		beego.Trace(fmt.Sprintf("%+v and num is %g", v, num))
-		return false, fmt.Errorf("不能超过%v", v.Max)
+		return false, fmt.Errorf("不能超过%.2f", v.Max)
 	}
 
 	return true, nil
@@ -118,14 +116,12 @@ func (v EmailValidator) Validate(val interface{}) (bool, error) {
 // Returns validator struct corresponding to validation type
 func getValidatorFromTag(tag string) Validator {
 	args := strings.Split(tag, ",")
-	beego.Trace(args)
 	switch args[0] {
 	case "number":
 		validator := NumberValidator{}
 		arg1 := args[1:]
 		if len(arg1) == 2 {
 			fmt.Sscanf(strings.Join(args[1:], ","), "min=%g,max=%g", &validator.Min, &validator.Max)
-			beego.Trace(validator)
 		} else if len(arg1) == 1 {
 			if strings.Contains(arg1[0], "min") {
 				fmt.Sscanf(strings.Join(args[1:], ","), "min=%g", &validator.Min)
