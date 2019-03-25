@@ -34,7 +34,7 @@ type StringValidator struct {
 }
 
 func (v StringValidator) Validate(val interface{}) (bool, error) {
-	l := len(val.(string))
+	l := len([]rune(val.(string)))
 
 	if l < v.Min {
 		if v.Min == 1 {
